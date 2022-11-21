@@ -7,6 +7,7 @@
 const http = require('node:http')
 const url = require('node:url')
 const { StringDecoder } = require('node:string_decoder')
+const config = require('./config')
 
 
 // error handler
@@ -19,19 +20,17 @@ function responseErrorHandler(res, code, description) {
 	})
 }
 
+function responseHandler(res, code, payload) {
+	res.writeHead(code, {'content-type': 'application/json'})
+	return JSON.stringify({...payload})	
+}
+
 // the server response to API requests
 const server = http.createServer(function(req, res){
 	const parsedUrl = url.parse(req.url, true)
 	// cleaning pathname from prefixed and postfixed slashes
 	const trimmedPath = parsedUrl.pathname.replace(/^\/+|\/+$/g, '')
 	const httpMethod = req.method.toUpperCase()
-
-	// request details
-	console.log(`path after trimming: ${trimmedPath} - ${httpMethod}`)
-	console.log("****query strings****")
-	console.log(Object.assign({}, parsedUrl.query))
-	console.log("****request headers****")
-	console.log(req.headers)
 
 	// parsing request body
 	const decoder = new StringDecoder('utf8')
@@ -43,17 +42,36 @@ const server = http.createServer(function(req, res){
 	// handle response
 	req.on('end', function(){
 		buffer += decoder.end()
-		try {
-			console.log("****request payload****")
-			console.log(JSON.parse(buffer))
-			res.end('hello world!\n')
-		} catch (error) {
-			res.end(responseErrorHandler(res, 400, 'error parsing request body'))
-		}	
+		const data = {
+			...req, 
+			path: trimmedPath, 
+			queryString: Object.assign({}, parsedUrl.query), 
+			method: req.method.toUpperCase(),
+			payload: buffer,
+		}
+		const handler = handlers[trimmedPath] ?? handlers.notFound		
+		handler(data, res)
 	})
 })
 
-// start the server, listening to port 3000
-server.listen(3000, function(){
-	console.log('the server is started and listening to port 3000')
+
+const handlers = {}
+
+handlers.sample = function(req, res) {
+	res.end(responseHandler(res, 200, {name: 'sample handler'}))
+}
+
+handlers.notFound = function(req, res) {
+	res.end(responseErrorHandler(res, 404))
+}
+
+const router = {
+	'sample': handlers.sample
+}
+
+
+// start the server, listening to port passed by configuration
+const { port, env } = config
+server.listen(port, function(){
+	console.log(`the ${env} server is started and listening to port ${port}`)
 })
