@@ -5,6 +5,8 @@
 
 // Dependencies
 const http = require('node:http')
+const https = require('node:https')
+const fs = require('node:fs')
 const url = require('node:url')
 const { StringDecoder } = require('node:string_decoder')
 const config = require('./config')
@@ -25,8 +27,7 @@ function responseHandler(res, code, payload) {
 	return JSON.stringify({...payload})	
 }
 
-// the server response to API requests
-const server = http.createServer(function(req, res){
+function serverHandler(req, res){
 	const parsedUrl = url.parse(req.url, true)
 	// cleaning pathname from prefixed and postfixed slashes
 	const trimmedPath = parsedUrl.pathname.replace(/^\/+|\/+$/g, '')
@@ -52,8 +53,7 @@ const server = http.createServer(function(req, res){
 		const handler = handlers[trimmedPath] ?? handlers.notFound		
 		handler(data, res)
 	})
-})
-
+}
 
 const handlers = {}
 
@@ -69,9 +69,25 @@ const router = {
 	'sample': handlers.sample
 }
 
+const { httpPort, httpsPort, env } = config
 
-// start the server, listening to port passed by configuration
-const { port, env } = config
-server.listen(port, function(){
-	console.log(`the ${env} server is started and listening to port ${port}`)
+// the httpServer response to API requests
+const httpServer = http.createServer(serverHandler)
+
+// start the http server, listening to port passed by configuration
+httpServer.listen(httpPort, function(){
+	console.log(`the ${env} server is started and listening to port ${httpPort}`)
+})
+
+
+// the httpsServer response to API requests
+const httpsServerOptions = {
+  'key': fs.readFileSync('./https/key.pem'),
+  'cert': fs.readFileSync('./https/cert.pem')
+};
+
+const httpsServer = https.createServer(httpsServerOptions, serverHandler)
+// start the https server, listening to port passed by configuration
+httpsServer.listen(httpsPort, function(){
+	console.log(`the ${env} server is started and listening to port ${httpsPort}`)
 })
